@@ -42,6 +42,7 @@ extern "C" {
 #include "lwip/err.h"
 #include "lwip/dns.h"
 #include "lwip/dhcp.h"
+#include "wpa2_enterprise.h"
 }
 
 #include "debug.h"
@@ -109,6 +110,92 @@ static bool sta_config_equal(const station_config& lhs, const station_config& rh
 
 bool ESP8266WiFiSTAClass::_useStaticIp = false;
 bool ESP8266WiFiSTAClass::_useInsecureWEP = false;
+
+
+
+/**
+ * Start Wifi connection with a WPA2 Enterprise AP
+ * if passphrase is set the most secure supported mode will be automatically selected
+ * @param ssid const char*          Pointer to the SSID string.
+ * @param wpa2_identity  const char*          Pointer to the entity
+ * @param wpa2_username  const char*          Pointer to the username
+ * @param password const char *     Pinter to the password.
+ * @param root_ca  const char*          Optional. Pointer to the root certificate string.
+ * @param client_cert  const char*          Optional. Pointer to the client certificate string.
+ * @param client_key  const char*          Optional. Pointer to the client key.
+ * @param bssid uint8_t[6]          Optional. BSSID / MAC of AP
+ * @param channel                   Optional. Channel of AP
+ * @param connect                   Optional. call connect
+ * @return
+ */
+wl_status_t WiFiSTAClass::begin(const char* wpa2_ssid, wpa2_auth_method_t method, const char* wpa2_identity, const char* wpa2_username, const char *wpa2_password, const char* ca_pem, const char* client_crt, const char* client_key, int32_t channel, const uint8_t* bssid, bool connect)
+{
+    if(!WiFi.enableSTA(true)) {
+        log_e("STA enable failed!");
+        return WL_CONNECT_FAILED;
+    }
+    
+    
+
+    if(!wpa2_ssid || *wpa2_ssid == 0x00 || strlen(wpa2_ssid) > 32) {
+        log_e("SSID too long or missing!");
+        return WL_CONNECT_FAILED;
+    }
+
+    if(wpa2_identity && strlen(wpa2_identity) > 64) {
+        log_e("identity too long!");
+        return WL_CONNECT_FAILED;
+    }
+
+    if(wpa2_username && strlen(wpa2_username) > 64) {
+        log_e("username too long!");
+        return WL_CONNECT_FAILED;
+    }
+
+    if(wpa2_password && strlen(wpa2_password) > 64) {
+        log_e("password too long!");
+    }
+
+    wifi_set_opmode(STATION_MODE);
+    struct station_config wifi_config;
+    
+    memset(&wifi_config, 0, sizeof(wifi_config));
+    strcpy((char*)wifi_config.ssid, ssid);
+    strcpy((char*)wifi_config.password, wpa2_password);
+    
+    wifi_station_set_config(&wifi_config);
+    wifi_station_set_wpa2_enterprise_auth(1);
+    // Clean up to be sure no old data is still inside
+    wifi_station_clear_cert_key();
+    wifi_station_clear_enterprise_ca_cert();
+    wifi_station_clear_enterprise_identity();
+    wifi_station_clear_enterprise_username();
+    wifi_station_clear_enterprise_password();
+    wifi_station_clear_enterprise_new_password();
+        
+    wifi_station_set_enterprise_identity((uint8*)wpa2_identity, strlen(wpa2_identity));
+    if(method == WPA2_AUTH_PEAP || method == WPA2_AUTH_TTLS) {
+        wifi_station_set_enterprise_username((uint8*)wpa2_username, strlen(wpa2_username));
+        wifi_station_set_enterprise_password((uint8*)wpa2_password, strlen((char*)wpa2_password));
+    }
+    
+    wifi_station_set_enterprise_ca_cert
+    wifi_station_set_enterprise_cert_key
+    
+    
+    if(ca_pem) {
+        wifi_station_set_enterprise_ca_cert(uint8_t *)ca_pem, strlen(ca_pem));
+    }
+
+    if(client_crt && client_key) {
+        wifi_station_set_enterprise_cert_key((uint8_t *)client_crt, strlen(client_crt), (uint8_t *)client_key, strlen(client_key), NULL, 0);
+    }
+    
+    ESP8266WiFi.begin(wpa2_ssid); //connect to wifi
+
+    return status();
+}
+
 
 /**
  * Start Wifi connection
